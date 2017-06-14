@@ -12,11 +12,14 @@ included.
 """
 
 import re
-import typing
+from typing import Tuple, Optional, Sequence
 import logging
 
 import requests
 import lxml.html as lhtml
+
+
+url = str
 
 
 class Board:
@@ -30,9 +33,16 @@ class Board:
 
     def scrape_threads(self):
         r = requests.get(self.url)
-        # TODO Parse method
-        root = lhtml.document_fromstring(r.content)
-        threads = [(elem.text, elem.attrib["href"]) for elem in root.cssselect("a.threadtitle")]
-        pagelink = root.cssselect("span.smallfont.pagelink > b > a")
-        next_page_url = next(elem.attrib["href"] for elem in pagelink if elem.text.startswith("nächste"))
+        next_page_url, threads = self.parse(r.content)
         r.close()
+
+    @staticmethod
+    def parse(page_content: bytes) -> Tuple[Optional[url], Sequence[Tuple[str, url]]]:
+        root = lhtml.document_fromstring(page_content)
+        threads = tuple((elem.text, elem.attrib["href"]) for elem in root.cssselect("a.threadtitle"))
+        pagelink = root.cssselect("span.smallfont.pagelink > b > a")
+        try:
+            next_page_url = next(elem.attrib["href"] for elem in pagelink if elem.text.startswith("nächste"))
+        except StopIteration:
+            next_page_url = None
+        return next_page_url, threads
