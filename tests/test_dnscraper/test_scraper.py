@@ -19,8 +19,10 @@ class TestScraper(unittest.TestCase):
             next_page_url, threads = board.parse(fd.read())
         self.assertEqual(next_page_url, "/lifestyle/digital-world/pc-internet-smartphone_b49/seite-2/")
         self.assertEqual(len(threads), 30)
-        titles, urls = zip(*threads)
-        # The first url is a pinned thread from another board.
+        titles, urls, polls = zip(*threads)
+        self.assertEqual(titles[-1], "Win 7 Kennwort ändern?")
+        self.assertEqual(sum(polls), 1)
+        self.assertTrue(polls[-2])
         for url in urls:
             self.assertTrue(url.startswith("/lifestyle/digital-world/pc-internet-smartphone/"))
 
@@ -30,8 +32,9 @@ class TestScraper(unittest.TestCase):
             next_page_url, threads = board.parse(fd.read())
         self.assertEqual(next_page_url, "/lifestyle/digital-world/pc-internet-smartphone_b49/seite-3/")
         self.assertEqual(len(threads), 30)
-        titles, urls = zip(*threads)
-        # The first url is a pinned thread from another board.
+        titles, urls, polls = zip(*threads)
+        self.assertEqual(sum(polls), 0)
+        self.assertEqual(titles[15], "Internationale Telefonate")
         for url in urls:
             self.assertTrue(url.startswith("/lifestyle/digital-world/pc-internet-smartphone/"))
 
@@ -41,8 +44,8 @@ class TestScraper(unittest.TestCase):
             next_page_url, threads = board.parse(fd.read())
         self.assertEqual(next_page_url, None)
         self.assertEqual(len(threads), 7)
-        titles, urls = zip(*threads)
-        # The first url is a pinned thread from another board.
+        titles, urls, polls = zip(*threads)
+        self.assertEqual(sum(polls), 0)
         for url in urls:
             self.assertTrue(url.startswith("/lifestyle/digital-world/pc-internet-smartphone/"))
 
