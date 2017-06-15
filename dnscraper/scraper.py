@@ -12,7 +12,7 @@ included.
 """
 
 import re
-from typing import Tuple, Optional, Sequence
+from typing import Tuple, Optional, List
 from urllib.parse import urljoin
 import logging
 
@@ -20,10 +20,23 @@ import requests
 import lxml.html as lhtml
 
 
-
 # Type definitions
-Url = str
 NETLOC = "http://www.digitalnippon.de/"
+
+
+def make_request(url: str, retries: int=3) -> bytes:
+    retry = 0
+    while True:
+        try:
+            r = requests.get(url)
+            r.raise_for_status()
+        except requests.HTTPError:
+            if retry < retries:
+                raise
+            else:
+                retry += 1
+                continue
+        return r.content
 
 
 class Board:
@@ -35,18 +48,28 @@ class Board:
     def __init__(self, path: str):
         self.path = path
         match = re.match(r""".+/.+_b([0-9]+)""", path)
-        self.idx = match.group(1)
+        self.idx = int(match.group(1))
 
     def scrape_threads(self):
-        r = requests.get(self.url)
-        next_page_url, threads = self.parse(r.content)
-        r.close()
+        content = make_request(urljoin(NETLOC, self.path))
+        root = lhtml.document_fromstring(content)
+        title = root.cssselect("head > title")[0].text
+        match = re.match(r"""(.+) \(Seite [0-9]+\)""", title)
+        if not match:
+            match = re.match(r"""(.+) \| Digital Nippon""", title)
+        self.title = match.group(1)
+        next_page_url, threads = self.parse(content)
+        while next_page_url:
+            content = make_request(urljoin(NETLOC, next_page_url))
+            next_page_url, more_threads = self.parse(content)
+            threads.extend(more_threads)
+        self.threads = threads
 
-    def parse(self, page_content: bytes) -> Tuple[Optional[Url], Sequence[Tuple[str, Url, bool]]]:
+    def parse(self, page_content: bytes) -> Tuple[Optional[str], List[Tuple[str, str, bool]]]:
         threads = self._parse_threads(page_content)
         # Make sure there are no sticky threads from other boards parsed.
         board_path = re.match(r"""(.+)_b[0-9]+""", self.path).group(1)
-        threads = tuple(filter(lambda x: x[1].find(board_path) >= 0, threads))
+        threads = list(filter(lambda x: x[1].find(board_path) >= 0, threads))
         root = lhtml.document_fromstring(page_content)
         pagelink = root.cssselect("span.smallfont.pagelink > b > a")
         try:
@@ -56,7 +79,7 @@ class Board:
         return next_page_url, threads
 
     @staticmethod
-    def _parse_threads(page_content: bytes) -> Tuple[str, Url, bool]:
+    def _parse_threads(page_content: bytes) -> List[Tuple[str, str, bool]]:
         root = lhtml.document_fromstring(page_content)
         threadbits = root.cssselect("tr.threadbit > td.tablea > span.normalfont")
         polls = []
@@ -72,7 +95,7 @@ class Board:
                 polls.append(False)
         threads = ((elem.text, elem.attrib["href"]) for elem in root.cssselect("a.threadtitle"))
         thread_titles, thread_urls = zip(*threads)
-        thread_tuples = tuple(zip(thread_titles, thread_urls, polls))
+        thread_tuples = list(zip(thread_titles, thread_urls, polls))
         assert len(thread_tuples) == len(polls)
         assert len(thread_tuples) == len(thread_titles)
         return thread_tuples

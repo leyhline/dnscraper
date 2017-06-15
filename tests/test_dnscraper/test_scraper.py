@@ -49,6 +49,10 @@ class TestScraper(unittest.TestCase):
         for url in urls:
             self.assertTrue(url.startswith("/lifestyle/digital-world/pc-internet-smartphone/"))
 
+    def test_parse_id(self):
+        board = scraper.Board("/lifestyle/digital-world/pc-internet-smartphone_b49/")
+        self.assertEqual(board.idx, 49)
+
 
 if __name__ == '__main__':
     unittest.main()
