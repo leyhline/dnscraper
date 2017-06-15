@@ -10,6 +10,7 @@ import dnscraper.scraper as scraper
 FST_PAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "dn_b49_1.html")
 SND_PAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "dn_b49_2.html")
 LST_PAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "dn_b49_4.html")
+USERLIST = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "dn_users.html")
 
 
 class TestScraper(unittest.TestCase):
@@ -52,6 +53,16 @@ class TestScraper(unittest.TestCase):
     def test_parse_id(self):
         board = scraper.Board("/lifestyle/digital-world/pc-internet-smartphone_b49/")
         self.assertEqual(board.idx, 49)
+
+    def test_userscraping(self):
+        userlist = scraper.UserList()
+        with open(USERLIST, "rb") as fd:
+            next_page_url, users = userlist.parse(fd.read())
+        self.assertEqual(next_page_url, "/memberslist.php?order=DESC&sortby=userposts&letter=&sid=&page=2")
+        self.assertEqual(len(users), 30)
+        voice = users[0]
+        self.assertEqual(voice[0], "Voice")
+        self.assertEqual(voice[1], "/mitglieder/voice_u1/")
 
 
 if __name__ == '__main__':

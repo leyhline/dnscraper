@@ -15,21 +15,22 @@ import re
 import os
 from time import sleep
 from typing import Tuple, Optional, List
-from urllib.parse import urljoin, quote
+from urllib.parse import urljoin
 import logging
 
 import requests
 import lxml.html as lhtml
 
 
-# Type definitions
 NETLOC = "http://www.digitalnippon.de/"
 PRINT_SUFFIX = "drucken/"
+logger = logging.getLogger(__name__)
 
 
 def to_file(path: str, content: bytes):
     with open(path, "xb") as fd:
         fd.write(content)
+        logger.info("{} written.".format(path))
 
 
 def make_request(url: str, retries: int=5, wait_for: float=0.5) -> bytes:
@@ -38,11 +39,13 @@ def make_request(url: str, retries: int=5, wait_for: float=0.5) -> bytes:
         try:
             r = requests.get(url)
             r.raise_for_status()
-        except requests.HTTPError:
+        except requests.HTTPError as e:
             if retry < retries:
+                logger.error(str(e))
                 raise
             else:
                 retry += 1
+                logger.warning(str(e) + " [Retrying {}/{}]".format(retry, retries))
                 sleep(wait_for)
                 continue
         return r.content
@@ -56,10 +59,14 @@ class Board:
 
     def __init__(self, path: str):
         self.path = path
-        match = re.match(r""".+/.+_b([0-9]+)""", path)
+        try:
+            match = re.match(r""".+/.+_b([0-9]+)""", path)
+        except AttributeError as e:
+            logger.error("URL does not match: " + path)
+            raise e
         self.idx = int(match.group(1))
 
-    def scrape_threads(self):
+    def scrape(self):
         content = make_request(urljoin(NETLOC, self.path))
         root = lhtml.document_fromstring(content)
         title = root.cssselect("head > title")[0].text
@@ -119,20 +126,52 @@ class Thread:
     poll_content = None
 
     def __init__(self, title: str, path: str, poll: bool=False):
-        match = re.match(r""".+/.+_t([0-9]+)""", path)
+        try:
+            match = re.match(r""".+/.+_t([0-9]+)""", path)
+        except AttributeError as e:
+            logger.error("URL does not match: " + path)
+            raise e
         self.idx = int(match.group(1))
         self.title = title
         self.path = path
         self.poll = poll
 
     def scrape(self):
-        self.content = make_request(urljoin(NETLOC, urljoin(self.path, PRINT_SUFFIX)))
+        self.content = make_request(urljoin(urljoin(NETLOC, self.path), PRINT_SUFFIX))
         if self.poll:
             self.poll_content = make_request(urljoin(NETLOC, self.path))
 
-    def save(self, directory: str=""):
+    def save(self):
         assert self.content
-        filename = quote(self.path, safe="")
-        to_file(os.path.join(directory, filename) + ".html", self.content)
+        path = self.path[:-1] if self.path[-1] == "/" else self.path
+        dirs, filename = os.path.split(path)
+        os.makedirs(dirs, exist_ok=True)
+        to_file(path + ".html", self.content)
         if self.poll:
-            to_file(os.path.join(directory, filename) + "+POLL.html", self.poll_content)
+            to_file(path + "+POLL.html", self.poll_content)
+
+
+class UserList:
+    path = "mitglieder/"
+    users = []
+
+    def scrape(self):
+        content = make_request(urljoin(NETLOC, self.path))
+        next_page_url, users = self.parse(content)
+        while next_page_url:
+            content = make_request(urljoin(NETLOC, next_page_url))
+            next_page_url, more_threads = self.parse(content)
+            users.extend(more_threads)
+        self.users = users
+
+    @staticmethod
+    def parse(page_content: bytes) -> Tuple[Optional[str], List[Tuple[str, str]]]:
+        root = lhtml.document_fromstring(page_content)
+        users = root.cssselect("td.tablea > span.normalfont > b > a")
+        users = list((elem.text, elem.attrib["href"]) for elem in users)
+        pagelink = root.cssselect("span.smallfont.pagelink > b > a")
+        try:
+            next_page_url = next(elem.attrib["href"] for elem in pagelink if elem.text.startswith("nächste"))
+        except StopIteration:
+            next_page_url = None
+        return next_page_url, users
