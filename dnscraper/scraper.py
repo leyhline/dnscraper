@@ -12,8 +12,9 @@ included.
 """
 
 import re
+import os
 from typing import Tuple, Optional, List
-from urllib.parse import urljoin
+from urllib.parse import urljoin, quote
 import logging
 
 import requests
@@ -22,6 +23,12 @@ import lxml.html as lhtml
 
 # Type definitions
 NETLOC = "http://www.digitalnippon.de/"
+PRINT_SUFFIX = "drucken/"
+
+
+def to_file(path: str, content: bytes):
+    with open(path, "xb") as fd:
+        fd.write(content)
 
 
 def make_request(url: str, retries: int=3) -> bytes:
@@ -101,4 +108,29 @@ class Board:
         return thread_tuples
 
 
+class Thread:
+    idx = None
+    title = None
+    path = None
+    content = None
+    poll = False
+    poll_content = None
 
+    def __init__(self, title: str, path: str, poll: bool=False):
+        match = re.match(r""".+/.+_t([0-9]+)""", path)
+        self.idx = int(match.group(1))
+        self.title = title
+        self.path = path
+        self.poll = poll
+
+    def scrape(self):
+        self.content = make_request(urljoin(NETLOC, urljoin(self.path, PRINT_SUFFIX)))
+        if self.poll:
+            self.poll_content = make_request(urljoin(NETLOC, self.path))
+
+    def save(self, directory: str=""):
+        assert self.content
+        filename = quote(self.path, safe="")
+        to_file(os.path.join(directory, filename) + ".html", self.content)
+        if self.poll:
+            to_file(os.path.join(directory, filename) + "+POLL.html", self.poll_content)
