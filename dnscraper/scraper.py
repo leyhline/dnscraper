@@ -13,6 +13,7 @@ included.
 
 import re
 import os
+from time import sleep
 from typing import Tuple, Optional, List
 from urllib.parse import urljoin, quote
 import logging
@@ -31,7 +32,7 @@ def to_file(path: str, content: bytes):
         fd.write(content)
 
 
-def make_request(url: str, retries: int=3) -> bytes:
+def make_request(url: str, retries: int=5, wait_for: float=0.5) -> bytes:
     retry = 0
     while True:
         try:
@@ -42,6 +43,7 @@ def make_request(url: str, retries: int=3) -> bytes:
                 raise
             else:
                 retry += 1
+                sleep(wait_for)
                 continue
         return r.content
 
