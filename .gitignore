@@ -100,3 +100,6 @@ ENV/
 
 # JetBrains IDE
 .idea/
+
+# Custom stuff
+/data/
