@@ -1,6 +1,9 @@
-from datetime import datetime
+from datetime import datetime, date, timedelta
 import re
 import lxml.html as lhtml
+
+
+SCRAPE_DATE = date(2017, 9, 8)
 
 
 class ForumPost:
@@ -16,7 +19,15 @@ class ForumPost:
         author_and_date_string = self.author_and_date_element.text_content()
         match = self._re_author_and_date.match(author_and_date_string)
         self.author, date, time = match.groups()
-        self.datetime = datetime.strptime(date + " " + time, "%d.%m.%Y %H:%M")
+        date_and_time = date + " " + time
+        if date_and_time.startswith("Heute"):
+            date_and_time = datetime.strptime(date_and_time.split()[1], "%H:%M")
+            self.datetime = datetime.combine(SCRAPE_DATE, date_and_time.time())
+        elif date_and_time.startswith("Gestern"):
+            date_and_time = datetime.strptime(date_and_time.split()[1], "%H:%M")
+            self.datetime = datetime.combine(SCRAPE_DATE - timedelta(days=1), date_and_time.time())
+        else:
+            self.datetime = datetime.strptime(date_and_time, "%d.%m.%Y %H:%M")
         
     def clean(self):
         if self.author_and_date_element is None:
@@ -29,7 +40,7 @@ class ForumPost:
         class_elements = self.element.find_class(class_name)
         for element in class_elements:
             element.getparent().remove(element)
-    
+
     @property
     def xml(self):
         return lhtml.etree.tostring(self.element)
@@ -48,7 +59,7 @@ def construct_cleaned_post(element: lhtml.Element) -> ForumPost:
 
 
 class ForumThread:
-    _re_title = re.compile(r"""(.*) - Komplett | """)
+    _re_title = re.compile(r"""(.*) - Komplett \|""")
     
     def __init__(self, filename_url_or_file):
         self.path = filename_url_or_file
@@ -65,3 +76,57 @@ class ForumThread:
         for element in post_elements:
             post = construct_cleaned_post(element)
             self.posts.append(post)
+
+
+class Author:
+    _re_name_from_title = re.compile(r"""Profil von (.*) \|""")
+    _SCRAPE_DATE = date(2017, 9, 8)
+    
+    def __init__(self, filename_url_or_file):
+        self.path = filename_url_or_file
+        self.name = None
+        self.gender = None
+        self.birthday = None
+        self.last_activity = None
+        self.registered_at = None
+
+    def parse(self):
+        etree = lhtml.parse(self.path)
+        root = etree.getroot()
+        self._parse_name_from_title(root)
+        self._parse_other_information(root)
+        
+    def _parse_name_from_title(self, html_root):
+        title = html_root.head.find("title")
+        match = self._re_name_from_title.match(title.text)
+        self.name = match.group(1)
+        
+    def _parse_other_information(self, html_root):
+        content = html_root.body.text_content()
+        content_lines = [line.strip() for line in content.splitlines() if line.strip()]
+        for i, line in enumerate(content_lines):
+            if line == "Geschlecht:":
+                self.gender = content_lines[i+1]
+            elif line == "Registriert am:":
+                registered_at = content_lines[i+1]
+                registered_at = datetime.strptime(registered_at, "%d.%m.%Y")
+                self.registered_at = registered_at.date()
+            elif line == "Geburtstag:":
+                birthday = content_lines[i+1]
+                try:
+                    birthday = datetime.strptime(birthday, "%d.%m.%Y")
+                except ValueError:
+                    birthday = datetime.strptime(birthday, "%d.%m.")
+                self.birthday = birthday.date()
+            elif line == "Letzte Aktivität:":
+                last_activity = content_lines[i+1]
+                if last_activity.startswith("Gestern"):
+                    self.last_activity = SCRAPE_DATE - timedelta(days=1)
+                elif last_activity.startswith("Heute"):
+                    self.last_activity = SCRAPE_DATE
+                elif last_activity.startswith("-"):
+                    self.last_activity = None
+                else:
+                    last_activity = last_activity.split()[0]
+                    last_activity = datetime.strptime(last_activity, "%d.%m.%Y")
+                    self.last_activity = last_activity.date()
