@@ -28,11 +28,13 @@ class ForumPost:
             self.datetime = datetime.combine(SCRAPE_DATE - timedelta(days=1), date_and_time.time())
         else:
             self.datetime = datetime.strptime(date_and_time, "%d.%m.%Y %H:%M")
-        
-    def clean(self):
+    
+    def clean_author_and_date(self):
         if self.author_and_date_element is None:
             self.author_and_date_element = self.element.find("i")
         self.element.remove(self.author_and_date_element)
+
+    def clean_quotes(self):
         self._remove_class("quote")
         self._remove_class("quotecontent")
         
@@ -54,7 +56,8 @@ def construct_cleaned_post(element: lhtml.Element) -> ForumPost:
     """Automatically construct, parse and clean a ForumPost."""
     post = ForumPost(element)
     post.parse_author_and_date()
-    post.clean()
+    post.clean_author_and_date()
+    post.clean_quotes()
     return post
 
 
