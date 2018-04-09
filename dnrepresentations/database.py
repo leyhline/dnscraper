@@ -51,7 +51,7 @@ class DbAuthor(Base):
     birthday = Column(Date)
     registered_at = Column(Date)
     last_activity = Column(Date)
-    posts = relationship("DbForumPost", back_populates="author", enable_typechecks=False)
+    posts = relationship("DbForumPost", back_populates="author")
 
     def __repr__(self):
         return "<Author(name=%s, gender=%s, registered_at=%s)>" % (
@@ -62,7 +62,7 @@ class DbForumThread(Base):
     __tablename__ = "thread"
 
     id = Column(Integer, primary_key=True)
-    posts = relationship("DbForumPost", backref="thread", enable_typechecks=False)
+    posts = relationship("DbForumPost", backref="thread")
     title = Column(String)
     board_id = Column(Integer, ForeignKey("board.id"))
 
@@ -76,7 +76,7 @@ class DbForumPost(Base):
     id = Column(Integer, primary_key=True)
     thread_id = Column(Integer, ForeignKey(DbForumThread.id))
     author_id = Column(Integer, ForeignKey(DbAuthor.id))
-    author = relationship("DbAuthor", back_populates="posts", enable_typechecks=False)
+    author = relationship("DbAuthor", back_populates="posts")
     xml = Column(Text)
     created_at = Column(DateTime)
 
@@ -90,7 +90,7 @@ class DbForumBoard(Base):
     id = Column(Integer, primary_key=True)
     path = Column(String, unique=True, nullable=False)
     parent = Column(Integer, ForeignKey("board.id"))
-    threads = relationship("DbForumThread", backref="board", enable_typechecks=False)
+    threads = relationship("DbForumThread", backref="board")
 
     def __repr__(self):
         return "<Post (path=%s)>" % self.path
