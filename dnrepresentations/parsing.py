@@ -19,12 +19,14 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 from datetime import datetime, date, timedelta
 import re
 import lxml.html as lhtml
+from . import Gender
+from .database import DbAuthor, DbForumThread, DbForumPost
 
 
 SCRAPE_DATE = date(2017, 9, 8)
 
 
-class ForumPost:
+class ForumPost(DbForumPost):
     _re_author_and_date = re.compile(r"""Geschrieben von (.*) am (.*) um (.*):""")
     
     def __init__(self, element: lhtml.Element):
@@ -36,16 +38,17 @@ class ForumPost:
             self.author_and_date_element = self.element.find("i")
         author_and_date_string = self.author_and_date_element.text_content()
         match = self._re_author_and_date.match(author_and_date_string)
-        self.author, date, time = match.groups()
+        author, date, time = match.groups()
+        self.author_string = author
         date_and_time = date + " " + time
         if date_and_time.startswith("Heute"):
             date_and_time = datetime.strptime(date_and_time.split()[1], "%H:%M")
-            self.datetime = datetime.combine(SCRAPE_DATE, date_and_time.time())
+            self.created_at = datetime.combine(SCRAPE_DATE, date_and_time.time())
         elif date_and_time.startswith("Gestern"):
             date_and_time = datetime.strptime(date_and_time.split()[1], "%H:%M")
-            self.datetime = datetime.combine(SCRAPE_DATE - timedelta(days=1), date_and_time.time())
+            self.created_at = datetime.combine(SCRAPE_DATE - timedelta(days=1), date_and_time.time())
         else:
-            self.datetime = datetime.strptime(date_and_time, "%d.%m.%Y %H:%M")
+            self.created_at = datetime.strptime(date_and_time, "%d.%m.%Y %H:%M")
     
     def clean_author_and_date(self):
         if self.author_and_date_element is None:
@@ -68,18 +71,9 @@ class ForumPost:
     @property
     def content(self):
         return self.element.text_content()
-    
-
-def construct_cleaned_post(element: lhtml.Element) -> ForumPost:
-    """Automatically construct, parse and clean a ForumPost."""
-    post = ForumPost(element)
-    post.parse_author_and_date()
-    post.clean_author_and_date()
-    post.clean_quotes()
-    return post
 
 
-class ForumThread:
+class ForumThread(DbForumThread):
     _re_title = re.compile(r"""(.*) - Komplett \|""")
     
     def __init__(self, filename_url_or_file):
@@ -99,14 +93,14 @@ class ForumThread:
             self.posts.append(post)
 
 
-class Author:
+class Author(DbAuthor):
     _re_name_from_title = re.compile(r"""Profil von (.*) \|""")
     _SCRAPE_DATE = date(2017, 9, 8)
     
     def __init__(self, filename_url_or_file):
         self.path = filename_url_or_file
         self.name = None
-        self.gender = None
+        self.gender = Gender.unspecified
         self.birthday = None
         self.last_activity = None
         self.registered_at = None
@@ -127,7 +121,7 @@ class Author:
         content_lines = [line.strip() for line in content.splitlines() if line.strip()]
         for i, line in enumerate(content_lines):
             if line == "Geschlecht:":
-                self.gender = content_lines[i+1]
+                self.gender = self._string_to_gender(content_lines[i+1])
             elif line == "Registriert am:":
                 registered_at = content_lines[i+1]
                 registered_at = datetime.strptime(registered_at, "%d.%m.%Y")
@@ -151,3 +145,12 @@ class Author:
                     last_activity = last_activity.split()[0]
                     last_activity = datetime.strptime(last_activity, "%d.%m.%Y")
                     self.last_activity = last_activity.date()
+
+    @staticmethod
+    def _string_to_gender(string):
+        if string == "männlich":
+            return Gender.male
+        elif string == "weiblich":
+            return Gender.female
+        else:
+            return Gender.unspecified

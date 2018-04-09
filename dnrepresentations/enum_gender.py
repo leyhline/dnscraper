@@ -16,5 +16,10 @@ You should have received a copy of the GNU General Public License
 along with this program. If not, see <http://www.gnu.org/licenses/>.
 """
 
-from .enum_gender import Gender
-from .database import Database
+from enum import Enum
+
+
+class Gender(Enum):
+    male = 1
+    female = 2
+    unspecified = 0
