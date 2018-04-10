@@ -12,6 +12,7 @@ seaborn = "*"
 cssselect = "*"
 jupyter-progressbar = "*"
 sqlalchemy = "*"
+ipython-sql = "*"
 
 [dev-packages]
 pytest = "*"
