@@ -16,6 +16,7 @@ You should have received a copy of the GNU General Public License
 along with this program. If not, see <http://www.gnu.org/licenses/>.
 """
 
+from os import path
 from datetime import datetime, date, timedelta
 import re
 import lxml.html as lhtml
@@ -129,7 +130,6 @@ class ForumThread(Base):
         for element in post_elements:
             post = ForumPost(element)
             post.parse_author_and_date()
-            post.clean_author_and_date()
             self.posts.append(post)
 
 
@@ -142,6 +142,7 @@ class Author(Base):
     birthday = Column(Date)
     registered_at = Column(Date)
     last_activity = Column(Date)
+    avatar_name = Column(String)
 
     def __repr__(self):
         return "<Author(name=%s, gender=%s, registered_at=%s)>" % (
@@ -163,7 +164,15 @@ class Author(Base):
         root = etree.getroot()
         self._parse_name_from_title(root)
         self._parse_other_information(root)
-        
+        self._parse_image_name(root)
+
+    def _parse_image_name(self, html_root):
+        avatars = [img.attrib["src"] for img in html_root.cssselect("td.tableb > img")
+                   if "src" in img.attrib and img.attrib["src"].startswith("/images/avatars")]
+        if len(avatars) > 0:
+            _, avatar_name = path.split(avatars[0])
+            self.avatar_name = avatar_name
+
     def _parse_name_from_title(self, html_root):
         title = html_root.head.find("title")
         match = self._re_name_from_title.match(title.text)
@@ -214,7 +223,6 @@ class ForumBoard(Base):
 
     id = Column(Integer, primary_key=True)
     path = Column(String, unique=True, nullable=False)
-    parent = Column(Integer, ForeignKey("board.id"))
 
     def __repr__(self):
         return "<Post (path=%s)>" % self.path
