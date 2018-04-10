@@ -19,14 +19,46 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 from datetime import datetime, date, timedelta
 import re
 import lxml.html as lhtml
+
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy import Column, Integer, String, Date, Enum, DateTime, Text
+from sqlalchemy import ForeignKey
+from sqlalchemy import create_engine
 from . import Gender
-from .database import DbAuthor, DbForumThread, DbForumPost
 
 
 SCRAPE_DATE = date(2017, 9, 8)
+Base = declarative_base()
 
 
-class ForumPost(DbForumPost):
+class Database:
+    def __init__(self, engine_url="sqlite:///:memory:", echo=False):
+        self.engine = create_engine(engine_url, echo=echo)
+        self._Session = sessionmaker(bind=self.engine)
+
+    def create_all(self):
+        Base.metadata.create_all(self.engine)
+
+    def delete_all(self):
+        Base.metadata.delete_all(self.engine)
+
+    def get_session(self):
+        return self._Session()
+
+
+class ForumPost(Base):
+    __tablename__ = "post"
+
+    id = Column(Integer, primary_key=True)
+    thread_id = Column(Integer, ForeignKey("thread.id"))
+    author_id = Column(Integer, ForeignKey("author.id"))
+    xml = Column(Text)
+    created_at = Column(DateTime)
+
+    def __repr__(self):
+        return "<Post (created_at=%s)>" % self.created_at
+
     _re_author_and_date = re.compile(r"""Geschrieben von (.*) am (.*) um (.*):""")
     
     def __init__(self, element: lhtml.Element):
@@ -34,6 +66,7 @@ class ForumPost(DbForumPost):
         self.author_and_date_element = None
         
     def parse_author_and_date(self):
+        self.xml = lhtml.etree.tostring(self.element)
         if self.author_and_date_element is None:
             self.author_and_date_element = self.element.find("i")
         author_and_date_string = self.author_and_date_element.text_content()
@@ -63,17 +96,22 @@ class ForumPost(DbForumPost):
         class_elements = self.element.find_class(class_name)
         for element in class_elements:
             element.getparent().remove(element)
-
-    @property
-    def xml(self):
-        return lhtml.etree.tostring(self.element)
     
     @property
     def content(self):
         return self.element.text_content()
 
 
-class ForumThread(DbForumThread):
+class ForumThread(Base):
+    __tablename__ = "thread"
+
+    id = Column(Integer, primary_key=True)
+    title = Column(String)
+    board_id = Column(Integer, ForeignKey("board.id"))
+
+    def __repr__(self):
+        return "<Thread (title=%s)>" % self.title
+
     _re_title = re.compile(r"""(.*) - Komplett \|""")
     
     def __init__(self, filename_url_or_file):
@@ -89,11 +127,26 @@ class ForumThread(DbForumThread):
         self.title = match.group(1)
         post_elements = root.cssselect("html > body > div.normalfont")
         for element in post_elements:
-            post = construct_cleaned_post(element)
+            post = ForumPost(element)
+            post.parse_author_and_date()
+            post.clean_author_and_date()
             self.posts.append(post)
 
 
-class Author(DbAuthor):
+class Author(Base):
+    __tablename__ = "author"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String, unique=True)
+    gender = Column(Enum(Gender), nullable=False, default=Gender.unspecified)
+    birthday = Column(Date)
+    registered_at = Column(Date)
+    last_activity = Column(Date)
+
+    def __repr__(self):
+        return "<Author(name=%s, gender=%s, registered_at=%s)>" % (
+            self.name, self.gender.name, self.registered_at.isoformat())
+
     _re_name_from_title = re.compile(r"""Profil von (.*) \|""")
     _SCRAPE_DATE = date(2017, 9, 8)
     
@@ -154,3 +207,14 @@ class Author(DbAuthor):
             return Gender.female
         else:
             return Gender.unspecified
+
+
+class ForumBoard(Base):
+    __tablename__ = "board"
+
+    id = Column(Integer, primary_key=True)
+    path = Column(String, unique=True, nullable=False)
+    parent_id = Column(Integer, ForeignKey("board.id"))
+
+    def __repr__(self):
+        return "<Post (path=%s)>" % self.path
