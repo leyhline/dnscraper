@@ -214,7 +214,7 @@ class ForumBoard(Base):
 
     id = Column(Integer, primary_key=True)
     path = Column(String, unique=True, nullable=False)
-    parent_id = Column(Integer, ForeignKey("board.id"))
+    parent = Column(Integer, ForeignKey("board.id"))
 
     def __repr__(self):
         return "<Post (path=%s)>" % self.path
